@@ -88,18 +88,19 @@ pytest test_api_live.py -v --api-key=sk-ant-xxx --model=claude-opus-4-6-20250514
 | **Context Management** | Compaction, Context editing, Auto prompt caching, Prompt caching (5m/1hr), Token counting | Bedrock exclusions, configurable strategies |
 | **Files and Assets** | Files API | Claude + Azure availability |
 
-### Live API tests (`test_api_live.py`) — auto-skipped without API key
+### Live API tests (`test_api_live.py`) — aligned with official docs, auto-skipped without API key
 
-| Test Class | What it verifies |
-|---|---|
-| **TestMessagesAPI** | Simple messages, system prompts, multi-turn, max_tokens, response metadata |
-| **TestStreaming** | Stream text, stream events |
-| **TestStructuredOutputs** | JSON response parsing |
-| **TestToolUse** | Tool invocation, tool result round-trip |
-| **TestExtendedThinking** | Thinking blocks + final answer |
-| **TestEffort** | Effort levels (low/medium/high) |
-| **TestTokenCounting** | Token counting endpoint |
-| **TestErrorHandling** | Invalid model, empty messages |
+Every test mirrors an official code example from the Anthropic documentation.
+
+| Test Class | Doc Source | What it verifies |
+|---|---|---|
+| **TestMessagesAPI** | Messages API | Create message, system prompt, multi-turn, stop reasons, usage metadata |
+| **TestStreaming** | [Streaming](https://platform.claude.com/docs/en/build-with-claude/streaming) | `text_stream` iteration, raw event types |
+| **TestAdaptiveThinking** | [Adaptive Thinking](https://platform.claude.com/docs/en/build-with-claude/adaptive-thinking) | `thinking.type: "adaptive"`, effort levels (low/medium/high), thinking blocks, streaming with thinking, `display: "omitted"` |
+| **TestToolUse** | [Tool Use](https://platform.claude.com/docs/en/agents-and-tools/tool-use/overview) | `get_weather` tool invocation, full tool result round-trip |
+| **TestStructuredOutputs** | [Structured Outputs](https://platform.claude.com/docs/en/build-with-claude/structured-outputs) | `output_config` with `json_schema`, `strict: true` tool use |
+| **TestTokenCounting** | Token Counting | `count_tokens` endpoint |
+| **TestErrorHandling** | API Errors | `NotFoundError` for invalid model, `BadRequestError` for empty messages |
 
 ## Project structure
 
