@@ -104,6 +104,10 @@ Every test mirrors an official code example from the Anthropic documentation.
 | **TestPDFSupport** | [PDF Support](https://platform.claude.com/docs/en/build-with-claude/pdf-support) | URL-based PDF document analysis |
 | **TestSearchResults** | [Search Results](https://platform.claude.com/docs/en/build-with-claude/search-results) | Top-level search results, search results from tool calls |
 | **TestPromptCaching** | [Prompt Caching](https://platform.claude.com/docs/en/build-with-claude/prompt-caching) | Automatic caching, explicit cache breakpoints |
+| **TestExtendedThinking** | [Extended Thinking](https://platform.claude.com/docs/en/build-with-claude/extended-thinking) | Manual `budget_tokens` mode, streaming with thinking, thinking + tool use round-trip |
+| **TestEffortParameter** | [Effort](https://platform.claude.com/docs/en/build-with-claude/effort) | Standalone `output_config.effort` (low/medium/high), token usage comparison |
+| **TestBatchProcessing** | [Batch Processing](https://platform.claude.com/docs/en/build-with-claude/batch-processing) | Create, retrieve, list, cancel message batches |
+| **TestFilesAPI** | [Files API](https://platform.claude.com/docs/en/build-with-claude/files) | Upload, list, use in message, delete (beta) |
 | **TestTokenCounting** | Token Counting | `count_tokens` endpoint |
 | **TestErrorHandling** | API Errors | `NotFoundError` for invalid model, `BadRequestError` for empty messages |
 

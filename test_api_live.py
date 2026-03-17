@@ -835,6 +835,367 @@ class TestPromptCaching:
 
 
 # ===========================================================================
+# Extended Thinking (manual) — from docs/en/build-with-claude/extended-thinking
+# ===========================================================================
+
+class TestExtendedThinking:
+    """Manual extended thinking with explicit budget_tokens.
+
+    Distinct from TestAdaptiveThinking which uses thinking.type: 'adaptive'.
+    """
+
+    def test_extended_thinking_with_budget(self, api_client, api_config):
+        """Docs: basic extended thinking with budget_tokens.
+
+        Source: extended-thinking#basic-usage
+        """
+        response = api_client.messages.create(
+            model=api_config.model,
+            max_tokens=16000,
+            thinking={"type": "enabled", "budget_tokens": 5000},
+            messages=[
+                {
+                    "role": "user",
+                    "content": "Are there an infinite number of prime numbers such that n mod 4 == 3?",
+                }
+            ],
+        )
+        thinking_blocks = [b for b in response.content if b.type == "thinking"]
+        text_blocks = [b for b in response.content if b.type == "text"]
+        assert len(thinking_blocks) > 0, "Expected thinking blocks"
+        assert len(text_blocks) > 0, "Expected text output"
+
+    def test_extended_thinking_streaming(self, api_client, api_config):
+        """Docs: streaming with extended thinking.
+
+        Source: extended-thinking#streaming-extended-thinking
+        """
+        block_types_seen = set()
+
+        with api_client.messages.stream(
+            model=api_config.model,
+            max_tokens=16000,
+            thinking={"type": "enabled", "budget_tokens": 5000},
+            messages=[
+                {
+                    "role": "user",
+                    "content": "What is the greatest common divisor of 1071 and 462?",
+                }
+            ],
+        ) as stream:
+            for event in stream:
+                if event.type == "content_block_start":
+                    block_types_seen.add(event.content_block.type)
+
+        assert "thinking" in block_types_seen, "Expected thinking block in stream"
+        assert "text" in block_types_seen, "Expected text block in stream"
+
+    def test_extended_thinking_with_tool_use(self, api_client, api_config):
+        """Docs: extended thinking with tool use — preserve thinking blocks.
+
+        Source: extended-thinking#extended-thinking-with-tool-use
+        """
+        weather_tool = {
+            "name": "get_weather",
+            "description": "Get the current weather in a given location",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "location": {"type": "string", "description": "The city and state"}
+                },
+                "required": ["location"],
+            },
+        }
+
+        response = api_client.messages.create(
+            model=api_config.model,
+            max_tokens=16000,
+            thinking={"type": "enabled", "budget_tokens": 5000},
+            tools=[weather_tool],
+            messages=[{"role": "user", "content": "What's the weather in Paris?"}],
+        )
+
+        thinking_block = next(
+            (b for b in response.content if b.type == "thinking"), None
+        )
+        tool_use_block = next(
+            (b for b in response.content if b.type == "tool_use"), None
+        )
+        assert tool_use_block is not None, "Expected tool_use block"
+
+        # Round-trip: pass thinking block back with tool result
+        continuation = api_client.messages.create(
+            model=api_config.model,
+            max_tokens=16000,
+            thinking={"type": "enabled", "budget_tokens": 5000},
+            tools=[weather_tool],
+            messages=[
+                {"role": "user", "content": "What's the weather in Paris?"},
+                {"role": "assistant", "content": [thinking_block, tool_use_block]},
+                {
+                    "role": "user",
+                    "content": [{
+                        "type": "tool_result",
+                        "tool_use_id": tool_use_block.id,
+                        "content": "Current temperature: 72°F, sunny",
+                    }],
+                },
+            ],
+        )
+        assert continuation.stop_reason == "end_turn"
+
+
+# ===========================================================================
+# Effort Parameter (standalone) — from docs/en/build-with-claude/effort
+# ===========================================================================
+
+class TestEffortParameter:
+    """Standalone effort parameter without thinking enabled.
+
+    Source: docs/en/build-with-claude/effort
+    """
+
+    def test_effort_low(self, api_client, api_config):
+        """Docs: basic usage with effort: low."""
+        response = api_client.messages.create(
+            model=api_config.model,
+            max_tokens=4096,
+            output_config={"effort": "low"},
+            messages=[{"role": "user", "content": "What is the capital of Japan?"}],
+        )
+        assert response.stop_reason == "end_turn"
+        assert "tokyo" in response.content[0].text.lower()
+
+    def test_effort_medium(self, api_client, api_config):
+        """Docs: basic usage with effort: medium.
+
+        Source: effort#basic-usage
+        """
+        response = api_client.messages.create(
+            model=api_config.model,
+            max_tokens=4096,
+            output_config={"effort": "medium"},
+            messages=[
+                {
+                    "role": "user",
+                    "content": "Analyze the trade-offs between microservices and monolithic architectures",
+                }
+            ],
+        )
+        assert response.stop_reason == "end_turn"
+        assert len(response.content[0].text) > 0
+
+    def test_effort_high(self, api_client, api_config):
+        """Docs: high effort (default behavior)."""
+        response = api_client.messages.create(
+            model=api_config.model,
+            max_tokens=4096,
+            output_config={"effort": "high"},
+            messages=[{"role": "user", "content": "What is the capital of Japan?"}],
+        )
+        assert response.stop_reason == "end_turn"
+        assert "tokyo" in response.content[0].text.lower()
+
+    def test_effort_affects_output_tokens(self, api_client, api_config):
+        """Docs: lower effort = fewer tokens. Compare low vs high on open-ended prompt."""
+        prompt = "Explain quantum computing, its history, and current applications."
+
+        low_response = api_client.messages.create(
+            model=api_config.model,
+            max_tokens=4096,
+            output_config={"effort": "low"},
+            messages=[{"role": "user", "content": prompt}],
+        )
+        high_response = api_client.messages.create(
+            model=api_config.model,
+            max_tokens=4096,
+            output_config={"effort": "high"},
+            messages=[{"role": "user", "content": prompt}],
+        )
+        # High effort should generally produce more output tokens
+        assert high_response.usage.output_tokens >= low_response.usage.output_tokens
+
+
+# ===========================================================================
+# Batch Processing — from docs/en/build-with-claude/batch-processing
+# ===========================================================================
+
+class TestBatchProcessing:
+    """Message Batches API lifecycle from the official documentation.
+
+    Source: docs/en/build-with-claude/batch-processing
+    Note: Tests only exercise the synchronous create/retrieve/list/cancel surface.
+    They do NOT wait for batch completion.
+    """
+
+    def _make_batch_requests(self, model):
+        return [
+            {
+                "custom_id": "test-request-1",
+                "params": {
+                    "model": model,
+                    "max_tokens": 64,
+                    "messages": [
+                        {"role": "user", "content": "Say hello."}
+                    ],
+                },
+            },
+            {
+                "custom_id": "test-request-2",
+                "params": {
+                    "model": model,
+                    "max_tokens": 64,
+                    "messages": [
+                        {"role": "user", "content": "Say goodbye."}
+                    ],
+                },
+            },
+        ]
+
+    def test_create_batch(self, api_client, api_config):
+        """Docs: create a message batch.
+
+        Source: batch-processing#creating-a-message-batch
+        """
+        batch = api_client.messages.batches.create(
+            requests=self._make_batch_requests(api_config.model),
+        )
+        assert batch.id.startswith("msgbatch_")
+        assert batch.type == "message_batch"
+        assert batch.processing_status in ("in_progress", "ended")
+
+    def test_retrieve_batch(self, api_client, api_config):
+        """Docs: retrieve a batch by ID.
+
+        Source: batch-processing#retrieving-a-message-batch
+        """
+        batch = api_client.messages.batches.create(
+            requests=self._make_batch_requests(api_config.model),
+        )
+        retrieved = api_client.messages.batches.retrieve(batch.id)
+        assert retrieved.id == batch.id
+
+    def test_list_batches(self, api_client, api_config):
+        """Docs: list recent batches.
+
+        Source: batch-processing#listing-all-message-batches
+        """
+        # Just assert no error — may be empty
+        batches = api_client.messages.batches.list(limit=5)
+        assert batches is not None
+
+    def test_cancel_batch(self, api_client, api_config):
+        """Docs: cancel a batch.
+
+        Source: batch-processing#canceling-a-message-batch
+        """
+        batch = api_client.messages.batches.create(
+            requests=self._make_batch_requests(api_config.model),
+        )
+        cancelled = api_client.messages.batches.cancel(batch.id)
+        assert cancelled.processing_status in ("canceling", "ended")
+
+
+# ===========================================================================
+# Files API (beta) — from docs/en/build-with-claude/files
+# ===========================================================================
+
+class TestFilesAPI:
+    """Files API lifecycle from the official documentation.
+
+    Source: docs/en/build-with-claude/files
+    Requires beta header: files-api-2025-04-14
+    """
+
+    def test_upload_and_list_files(self, require_api_key):
+        """Docs: upload a file, then list files.
+
+        Source: files#uploading-a-file, files#list-files
+        """
+        import io
+        anthropic = pytest.importorskip("anthropic")
+        client = anthropic.Anthropic(
+            api_key=require_api_key.api_key,
+            base_url=require_api_key.base_url,
+        )
+
+        content = b"The Eiffel Tower is located in Paris, France. It was built in 1889."
+        uploaded = client.beta.files.upload(
+            file=("test_doc.txt", io.BytesIO(content), "text/plain"),
+        )
+        try:
+            assert uploaded.id.startswith("file_")
+            assert uploaded.filename == "test_doc.txt"
+
+            # List files
+            files = client.beta.files.list()
+            file_ids = [f.id for f in files.data]
+            assert uploaded.id in file_ids
+        finally:
+            client.beta.files.delete(uploaded.id)
+
+    def test_use_file_in_message(self, require_api_key):
+        """Docs: reference an uploaded file by file_id in a message.
+
+        Source: files#using-a-file-in-messages
+        """
+        import io
+        anthropic = pytest.importorskip("anthropic")
+        client = anthropic.Anthropic(
+            api_key=require_api_key.api_key,
+            base_url=require_api_key.base_url,
+        )
+
+        content = b"The speed of light is approximately 299,792,458 meters per second."
+        uploaded = client.beta.files.upload(
+            file=("science_facts.txt", io.BytesIO(content), "text/plain"),
+        )
+        try:
+            response = client.beta.messages.create(
+                model=require_api_key.model,
+                max_tokens=1024,
+                betas=["files-api-2025-04-14"],
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "document",
+                                "source": {
+                                    "type": "file",
+                                    "file_id": uploaded.id,
+                                },
+                            },
+                            {"type": "text", "text": "What is the speed of light according to this document?"},
+                        ],
+                    }
+                ],
+            )
+            text = response.content[0].text.lower()
+            assert "299" in text or "speed of light" in text
+        finally:
+            client.beta.files.delete(uploaded.id)
+
+    def test_delete_file(self, require_api_key):
+        """Docs: delete a file.
+
+        Source: files#delete-a-file
+        """
+        import io
+        anthropic = pytest.importorskip("anthropic")
+        client = anthropic.Anthropic(
+            api_key=require_api_key.api_key,
+            base_url=require_api_key.base_url,
+        )
+
+        uploaded = client.beta.files.upload(
+            file=("to_delete.txt", io.BytesIO(b"temporary file"), "text/plain"),
+        )
+        result = client.beta.files.delete(uploaded.id)
+        assert result.id == uploaded.id
+
+
+# ===========================================================================
 # Token Counting — from docs
 # ===========================================================================
 
