@@ -1,17 +1,83 @@
 # Anthropic Platform Feature Tests
 
 Comprehensive test suite that validates every feature documented on the
-[Claude Platform — Build with Claude](https://platform.claude.com/docs/en/build-with-claude/overview) overview page.
+[Claude Platform — Build with Claude](https://platform.claude.com/docs/en/build-with-claude/overview) overview page — plus live API integration tests against any Anthropic-compatible endpoint.
 
 ## Why this exists
 
 Anthropic ships features fast. This repo gives us a single `pytest` run that
 answers: **"Does our understanding of the platform still match the docs?"**
+and **"Does this API endpoint actually work?"**
 
-Each feature is modeled as an immutable `Feature` dataclass with name, category,
-description, and platform availability — then verified by 51 targeted tests.
+## Quick start
 
-## What's covered
+```bash
+git clone https://github.com/stevenxxzg-master/anthropic-source-check.git
+cd anthropic-source-check
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+### Run catalog tests (no API key needed)
+
+```bash
+pytest test_claude_platform_features.py -v
+```
+
+### Run live API tests
+
+```bash
+# Option 1: environment variable
+export ANTHROPIC_API_KEY=sk-ant-xxx
+pytest test_api_live.py -v
+
+# Option 2: CLI flags (great for testing proxies)
+pytest test_api_live.py -v \
+  --base-url=https://my-proxy.com \
+  --api-key=sk-xxx \
+  --model=claude-sonnet-4-6-20250514
+
+# Option 3: .env file
+cp .env.example .env
+# edit .env with your credentials
+pytest test_api_live.py -v
+
+# Run everything
+pytest -v
+```
+
+## Configuration
+
+All settings can be provided via **CLI flags**, **environment variables**, or a **`.env` file**.
+Priority: CLI > env vars > `.env` > defaults.
+
+| Setting | CLI Flag | Env Var | Default |
+|---|---|---|---|
+| Base URL | `--base-url` | `ANTHROPIC_BASE_URL` | `https://api.anthropic.com` |
+| API Key | `--api-key` | `ANTHROPIC_API_KEY` | _(none — live tests skipped)_ |
+| Model | `--model` | `ANTHROPIC_MODEL` | `claude-sonnet-4-6-20250514` |
+| Timeout | `--timeout` | `ANTHROPIC_TIMEOUT` | `30` |
+
+This makes it easy to test against different providers:
+
+```bash
+# Official Anthropic API
+pytest test_api_live.py -v --api-key=sk-ant-xxx
+
+# Custom proxy / gateway
+pytest test_api_live.py -v --base-url=https://gateway.mycompany.com --api-key=my-key
+
+# AWS Bedrock proxy
+pytest test_api_live.py -v --base-url=https://bedrock-proxy.internal --api-key=xxx
+
+# Different model
+pytest test_api_live.py -v --api-key=sk-ant-xxx --model=claude-opus-4-6-20250514
+```
+
+## What's tested
+
+### Catalog tests (`test_claude_platform_features.py`) — 51 tests
 
 | Category | Features | Example tests |
 |---|---|---|
@@ -22,61 +88,32 @@ description, and platform availability — then verified by 51 targeted tests.
 | **Context Management** | Compaction, Context editing, Auto prompt caching, Prompt caching (5m/1hr), Token counting | Bedrock exclusions, configurable strategies |
 | **Files and Assets** | Files API | Claude + Azure availability |
 
-**Cross-cutting checks:** every feature is on Claude API, no empty platforms,
-no duplicate names, all descriptions non-empty.
+### Live API tests (`test_api_live.py`) — auto-skipped without API key
 
-## Quick start
-
-```bash
-# Clone and set up
-cd /path/to/anthropic-test
-python3 -m venv .venv
-source .venv/bin/activate
-pip install pytest
-
-# Run all 51 tests
-pytest -v
-
-# Run a specific category
-pytest -v -k "TestModelCapabilities"
-pytest -v -k "TestPlatformAvailability"
-```
+| Test Class | What it verifies |
+|---|---|
+| **TestMessagesAPI** | Simple messages, system prompts, multi-turn, max_tokens, response metadata |
+| **TestStreaming** | Stream text, stream events |
+| **TestStructuredOutputs** | JSON response parsing |
+| **TestToolUse** | Tool invocation, tool result round-trip |
+| **TestExtendedThinking** | Thinking blocks + final answer |
+| **TestEffort** | Effort levels (low/medium/high) |
+| **TestTokenCounting** | Token counting endpoint |
+| **TestErrorHandling** | Invalid model, empty messages |
 
 ## Project structure
 
 ```
 anthropic-test/
 ├── README.md
+├── .env.example          # Template — copy to .env
 ├── .gitignore
-└── test_claude_platform_features.py   # Feature catalog + 51 tests
+├── requirements.txt      # pytest + anthropic SDK
+├── config.py             # Configuration loader (CLI > env > .env > defaults)
+├── conftest.py           # Pytest fixtures + CLI options
+├── test_claude_platform_features.py  # Feature catalog + 51 tests
+└── test_api_live.py      # Live API integration tests
 ```
-
-## Architecture
-
-```
-Feature (frozen dataclass)
-  ├── name: str
-  ├── category: str
-  ├── description: str
-  └── platforms: FrozenSet[str]
-
-FeatureCatalog (frozen dataclass)
-  ├── by_category(category) → tuple[Feature, ...]
-  ├── by_name(name) → Feature | None
-  └── names_in(category) → frozenset[str]
-```
-
-All data structures are **immutable** (`frozen=True`). The catalog is built once
-as a module-level constant and shared across all test classes.
-
-## Updating
-
-When Anthropic updates the overview page:
-
-1. Compare the page against `CATALOG` in `test_claude_platform_features.py`
-2. Add/remove/update `Feature` entries
-3. Adjust test assertions
-4. Run `pytest -v` — all 51 (or more) tests should pass
 
 ## License
 
