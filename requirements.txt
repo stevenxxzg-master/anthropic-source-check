@@ -1,2 +1,5 @@
 pytest>=8.0
 anthropic>=0.40.0
+
+# Level 3: Quality & Correctness (optional — tests auto-skip if missing)
+deepeval>=2.0.0

@@ -45,6 +45,12 @@ pytest test_api_live.py -v
 
 # Run everything
 pytest -v
+
+# Run quality evals (Level 3 — requires deepeval)
+pytest test_eval_quality.py -v
+
+# Run performance benchmarks (Level 4 — use -s to see output)
+pytest test_perf_benchmark.py -v -s
 ```
 
 ## Configuration
@@ -111,6 +117,26 @@ Every test mirrors an official code example from the Anthropic documentation.
 | **TestTokenCounting** | Token Counting | `count_tokens` endpoint |
 | **TestErrorHandling** | API Errors | `NotFoundError` for invalid model, `BadRequestError` for empty messages |
 
+### Level 3: Quality & Correctness (`test_eval_quality.py`) — requires `deepeval`
+
+| Test Class | Metric | What it verifies |
+|---|---|---|
+| **TestCorrectness** | GEval | 5 factual Q&A pairs (water formula, WWII end date, speed of light, Shakespeare, Australia capital) |
+| **TestHallucination** | HallucinationMetric | Stays grounded in context, admits unknown when context lacks answer |
+| **TestAnswerRelevancy** | AnswerRelevancyMetric | Response addresses the question (exercise benefits, photosynthesis, ML) |
+| **TestFaithfulness** | FaithfulnessMetric | Claims traceable to retrieval context (Tesla history) |
+| **TestStructuredOutputCorrectness** | Manual assertions | JSON extraction accuracy, sentiment classification correctness |
+
+### Level 4: Performance Benchmarks (`test_perf_benchmark.py`) — use `-s` to see results
+
+| Test Class | What it measures |
+|---|---|
+| **TestLatency** | Simple message, long response, large system prompt round-trip times |
+| **TestStreamingTTFT** | Time to first token (plain streaming, streaming with thinking) |
+| **TestThroughput** | Tokens per second, effort level throughput comparison |
+| **TestTokenUsage** | Input/output token counts, tool definition overhead, cache efficiency |
+| **TestFeatureOverhead** | Latency overhead of thinking, structured output JSON schema enforcement |
+
 ## Project structure
 
 ```
@@ -118,11 +144,13 @@ anthropic-test/
 ├── README.md
 ├── .env.example          # Template — copy to .env
 ├── .gitignore
-├── requirements.txt      # pytest + anthropic SDK
+├── requirements.txt      # pytest + anthropic + deepeval
 ├── config.py             # Configuration loader (CLI > env > .env > defaults)
 ├── conftest.py           # Pytest fixtures + CLI options
-├── test_claude_platform_features.py  # Feature catalog + 51 tests
-└── test_api_live.py      # Live API integration tests
+├── test_claude_platform_features.py  # Level 1-2: Feature catalog (51 tests)
+├── test_api_live.py                 # Level 2: Live API feature tests (46 tests)
+├── test_eval_quality.py             # Level 3: Quality & correctness evals (14 tests)
+└── test_perf_benchmark.py           # Level 4: Performance benchmarks (13 tests)
 ```
 
 ## License
