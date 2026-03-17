@@ -451,6 +451,390 @@ class TestStructuredOutputs:
 
 
 # ===========================================================================
+# Citations — from docs/en/build-with-claude/citations
+# ===========================================================================
+
+class TestCitations:
+    """Citation patterns from the official citations documentation."""
+
+    def test_plain_text_citations(self, api_client, api_config):
+        """Docs: basic citation example with plain text document.
+
+        Source: citations#how-citations-work
+        """
+        response = api_client.messages.create(
+            model=api_config.model,
+            max_tokens=1024,
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "document",
+                            "source": {
+                                "type": "text",
+                                "media_type": "text/plain",
+                                "data": "The grass is green. The sky is blue.",
+                            },
+                            "title": "My Document",
+                            "context": "This is a trustworthy document.",
+                            "citations": {"enabled": True},
+                        },
+                        {"type": "text", "text": "What color is the grass and sky?"},
+                    ],
+                }
+            ],
+        )
+        # Response should contain text blocks, some with citations
+        text_blocks = [b for b in response.content if b.type == "text"]
+        assert len(text_blocks) > 0
+
+        # At least one block should have citations
+        cited_blocks = [b for b in text_blocks if hasattr(b, "citations") and b.citations]
+        assert len(cited_blocks) > 0, "Expected at least one cited text block"
+
+        # Check citation structure
+        citation = cited_blocks[0].citations[0]
+        assert citation.type == "char_location"
+        assert hasattr(citation, "cited_text")
+        assert citation.document_index == 0
+
+    def test_custom_content_citations(self, api_client, api_config):
+        """Docs: custom content documents give control over citation granularity.
+
+        Source: citations#custom-content-documents
+        """
+        response = api_client.messages.create(
+            model=api_config.model,
+            max_tokens=1024,
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "document",
+                            "source": {
+                                "type": "content",
+                                "content": [
+                                    {"type": "text", "text": "Python was created by Guido van Rossum."},
+                                    {"type": "text", "text": "JavaScript was created by Brendan Eich."},
+                                ],
+                            },
+                            "title": "Programming Languages",
+                            "citations": {"enabled": True},
+                        },
+                        {"type": "text", "text": "Who created Python?"},
+                    ],
+                }
+            ],
+        )
+        text_blocks = [b for b in response.content if b.type == "text"]
+        assert len(text_blocks) > 0
+
+        # Should cite from content blocks
+        cited_blocks = [b for b in text_blocks if hasattr(b, "citations") and b.citations]
+        assert len(cited_blocks) > 0
+        citation = cited_blocks[0].citations[0]
+        assert citation.type == "content_block_location"
+
+
+# ===========================================================================
+# Vision — from docs/en/build-with-claude/vision
+# ===========================================================================
+
+class TestVision:
+    """Vision patterns from the official vision documentation."""
+
+    def test_url_image(self, api_client, api_config):
+        """Docs: URL-based image example.
+
+        Source: vision#url-based-image-example
+        """
+        response = api_client.messages.create(
+            model=api_config.model,
+            max_tokens=1024,
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image",
+                            "source": {
+                                "type": "url",
+                                "url": "https://upload.wikimedia.org/wikipedia/commons/a/a7/Camponotus_flavomarginatus_ant.jpg",
+                            },
+                        },
+                        {"type": "text", "text": "Describe this image."},
+                    ],
+                }
+            ],
+        )
+        assert response.stop_reason == "end_turn"
+        text = response.content[0].text.lower()
+        assert "ant" in text or "insect" in text
+
+    def test_base64_image(self, api_client, api_config):
+        """Docs: base64-encoded image example.
+
+        Source: vision#base64-encoded-image-example
+        """
+        # Minimal 1x1 PNG (from docs)
+        image_data = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC"
+
+        response = api_client.messages.create(
+            model=api_config.model,
+            max_tokens=1024,
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": "image/png",
+                                "data": image_data,
+                            },
+                        },
+                        {"type": "text", "text": "Describe this image."},
+                    ],
+                }
+            ],
+        )
+        assert response.stop_reason == "end_turn"
+        assert len(response.content[0].text) > 0
+
+
+# ===========================================================================
+# PDF Support — from docs/en/build-with-claude/pdf-support
+# ===========================================================================
+
+class TestPDFSupport:
+    """PDF processing from the official PDF support documentation."""
+
+    def test_url_pdf_document(self, api_client, api_config):
+        """Docs: URL-based PDF document example.
+
+        Source: pdf-support#option-1-url-based-pdf-document
+        """
+        response = api_client.messages.create(
+            model=api_config.model,
+            max_tokens=1024,
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "document",
+                            "source": {
+                                "type": "url",
+                                "url": "https://assets.anthropic.com/m/1cd9d098ac3e6467/original/Claude-3-Model-Card-October-Addendum.pdf",
+                            },
+                        },
+                        {"type": "text", "text": "What are the key findings in this document?"},
+                    ],
+                }
+            ],
+        )
+        assert response.stop_reason == "end_turn"
+        assert len(response.content[0].text) > 0
+
+
+# ===========================================================================
+# Search Results — from docs/en/build-with-claude/search-results
+# ===========================================================================
+
+class TestSearchResults:
+    """Search results for RAG from the official documentation."""
+
+    def test_search_results_in_user_message(self, api_client, api_config):
+        """Docs: top-level search results in user messages.
+
+        Source: search-results#as-top-level-content
+        """
+        response = api_client.messages.create(
+            model=api_config.model,
+            max_tokens=1024,
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "server_tool_use",
+                            "id": "srvtoolu_search_001",
+                            "name": "search",
+                            "input": {"query": "What is Python?"},
+                        },
+                        {
+                            "type": "server_tool_result",
+                            "tool_use_id": "srvtoolu_search_001",
+                            "content": [
+                                {
+                                    "type": "search_result",
+                                    "source": "https://en.wikipedia.org/wiki/Python_(programming_language)",
+                                    "title": "Python (programming language)",
+                                    "content": [
+                                        {
+                                            "type": "text",
+                                            "text": "Python is a high-level, general-purpose programming language created by Guido van Rossum.",
+                                        }
+                                    ],
+                                },
+                            ],
+                        },
+                        {
+                            "type": "text",
+                            "text": "What is Python?",
+                        },
+                    ],
+                }
+            ],
+        )
+        assert response.stop_reason == "end_turn"
+        text = response.content[0].text.lower()
+        assert "python" in text
+
+    def test_search_results_from_tool_call(self, api_client, api_config):
+        """Docs: search results returned from a custom tool.
+
+        Source: search-results#from-tool-calls
+        """
+        # Step 1: Claude calls a search tool
+        response = api_client.messages.create(
+            model=api_config.model,
+            max_tokens=1024,
+            tools=[
+                {
+                    "name": "search_knowledge_base",
+                    "description": "Search the knowledge base for relevant information",
+                    "input_schema": {
+                        "type": "object",
+                        "properties": {
+                            "query": {
+                                "type": "string",
+                                "description": "The search query",
+                            }
+                        },
+                        "required": ["query"],
+                    },
+                }
+            ],
+            messages=[
+                {"role": "user", "content": "Search for info about the Eiffel Tower"}
+            ],
+        )
+        assert response.stop_reason == "tool_use"
+
+        tool_block = next(b for b in response.content if b.type == "tool_use")
+        assert tool_block.name == "search_knowledge_base"
+
+        # Step 2: Return search results
+        final = api_client.messages.create(
+            model=api_config.model,
+            max_tokens=1024,
+            tools=[
+                {
+                    "name": "search_knowledge_base",
+                    "description": "Search the knowledge base for relevant information",
+                    "input_schema": {
+                        "type": "object",
+                        "properties": {
+                            "query": {"type": "string", "description": "The search query"}
+                        },
+                        "required": ["query"],
+                    },
+                }
+            ],
+            messages=[
+                {"role": "user", "content": "Search for info about the Eiffel Tower"},
+                {"role": "assistant", "content": response.content},
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": tool_block.id,
+                            "content": [
+                                {
+                                    "type": "search_result",
+                                    "source": "https://en.wikipedia.org/wiki/Eiffel_Tower",
+                                    "title": "Eiffel Tower",
+                                    "content": [
+                                        {
+                                            "type": "text",
+                                            "text": "The Eiffel Tower is a wrought-iron lattice tower in Paris, France. It was constructed from 1887 to 1889 and is 330 metres tall.",
+                                        }
+                                    ],
+                                },
+                            ],
+                        }
+                    ],
+                },
+            ],
+        )
+        assert final.stop_reason == "end_turn"
+        text = final.content[0].text.lower()
+        assert "eiffel" in text or "paris" in text or "tower" in text
+
+
+# ===========================================================================
+# Prompt Caching — from docs/en/build-with-claude/prompt-caching
+# ===========================================================================
+
+class TestPromptCaching:
+    """Prompt caching patterns from the official documentation."""
+
+    def test_automatic_caching(self, api_client, api_config):
+        """Docs: automatic caching with cache_control parameter.
+
+        Source: prompt-caching#automatic-caching
+        """
+        response = api_client.messages.create(
+            model=api_config.model,
+            max_tokens=1024,
+            cache_control={"type": "ephemeral"},
+            system="You are an AI assistant tasked with analyzing literary works.",
+            messages=[
+                {
+                    "role": "user",
+                    "content": "Analyze the major themes in 'Pride and Prejudice'.",
+                }
+            ],
+        )
+        assert response.stop_reason == "end_turn"
+        assert response.usage.input_tokens > 0
+
+    def test_explicit_cache_breakpoint(self, api_client, api_config):
+        """Docs: explicit cache_control on system prompt blocks.
+
+        Source: prompt-caching#large-context-caching-example
+        """
+        response = api_client.messages.create(
+            model=api_config.model,
+            max_tokens=1024,
+            system=[
+                {
+                    "type": "text",
+                    "text": "You are an AI assistant tasked with analyzing documents.",
+                },
+                {
+                    "type": "text",
+                    "text": "Here is background context: " + ("x " * 500),
+                    "cache_control": {"type": "ephemeral"},
+                },
+            ],
+            messages=[
+                {
+                    "role": "user",
+                    "content": "Summarize the key points.",
+                }
+            ],
+        )
+        assert response.stop_reason == "end_turn"
+        assert len(response.content[0].text) > 0
+
+
+# ===========================================================================
 # Token Counting — from docs
 # ===========================================================================
 

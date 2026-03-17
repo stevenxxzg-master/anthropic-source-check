@@ -99,6 +99,11 @@ Every test mirrors an official code example from the Anthropic documentation.
 | **TestAdaptiveThinking** | [Adaptive Thinking](https://platform.claude.com/docs/en/build-with-claude/adaptive-thinking) | `thinking.type: "adaptive"`, effort levels (low/medium/high), thinking blocks, streaming with thinking, `display: "omitted"` |
 | **TestToolUse** | [Tool Use](https://platform.claude.com/docs/en/agents-and-tools/tool-use/overview) | `get_weather` tool invocation, full tool result round-trip |
 | **TestStructuredOutputs** | [Structured Outputs](https://platform.claude.com/docs/en/build-with-claude/structured-outputs) | `output_config` with `json_schema`, `strict: true` tool use |
+| **TestCitations** | [Citations](https://platform.claude.com/docs/en/build-with-claude/citations) | Plain text citations with `char_location`, custom content with `content_block_location` |
+| **TestVision** | [Vision](https://platform.claude.com/docs/en/build-with-claude/vision) | URL-based image, base64-encoded image |
+| **TestPDFSupport** | [PDF Support](https://platform.claude.com/docs/en/build-with-claude/pdf-support) | URL-based PDF document analysis |
+| **TestSearchResults** | [Search Results](https://platform.claude.com/docs/en/build-with-claude/search-results) | Top-level search results, search results from tool calls |
+| **TestPromptCaching** | [Prompt Caching](https://platform.claude.com/docs/en/build-with-claude/prompt-caching) | Automatic caching, explicit cache breakpoints |
 | **TestTokenCounting** | Token Counting | `count_tokens` endpoint |
 | **TestErrorHandling** | API Errors | `NotFoundError` for invalid model, `BadRequestError` for empty messages |
 
