@@ -3,10 +3,15 @@ Pytest configuration — shared fixtures and CLI options.
 
 Adds --base-url, --api-key, --model CLI flags so you can point tests
 at any Anthropic-compatible endpoint without touching env vars.
+
+Reports are auto-generated in output-check/ after every run.
 """
 
 import pytest
 from config import ApiConfig, load_config
+
+# Register the report plugin
+pytest_plugins = ["report_plugin"]
 
 
 # ---------------------------------------------------------------------------
