@@ -7,11 +7,29 @@ at any Anthropic-compatible endpoint without touching env vars.
 Reports are auto-generated in output-check/ after every run.
 """
 
+import os
+from pathlib import Path
+
 import pytest
 from config import ApiConfig, load_config
 
 # Register the report plugin
 pytest_plugins = ["report_plugin"]
+
+# Load .env into os.environ so DeepEval/OpenAI picks up OPENAI_API_KEY etc.
+_env_path = Path(__file__).parent / ".env"
+if _env_path.exists():
+    for line in _env_path.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key = key.strip()
+        value = value.strip().strip("\"'")
+        if key not in os.environ:
+            os.environ[key] = value
 
 
 # ---------------------------------------------------------------------------

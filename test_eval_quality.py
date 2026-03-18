@@ -16,6 +16,7 @@ Run:
 """
 
 import json
+import os
 import pytest
 import time
 
@@ -40,9 +41,30 @@ def _call_claude(api_client, api_config, prompt, system=None, max_tokens=1024):
     return response.content[0].text
 
 
+def _get_judge_model():
+    """Get the DeepEval judge model, configured via env vars.
+
+    Supports custom OpenAI-compatible endpoints via:
+        OPENAI_BASE_URL — custom base URL (e.g. proxy)
+        OPENAI_MODEL_NAME — model name (default: gpt-4.1)
+    """
+    from deepeval.models import GPTModel
+
+    base_url = os.environ.get("OPENAI_BASE_URL")
+    model_name = os.environ.get("OPENAI_MODEL_NAME", "gpt-4.1")
+
+    kwargs = {"model": model_name}
+    if base_url:
+        kwargs["base_url"] = base_url
+
+    return GPTModel(**kwargs)
+
+
 def _skip_no_deepeval():
-    """Skip if deepeval is not installed."""
+    """Skip if deepeval is not installed or no OpenAI key configured."""
     pytest.importorskip("deepeval", reason="deepeval not installed — pip install deepeval")
+    if not os.environ.get("OPENAI_API_KEY"):
+        pytest.skip("No OPENAI_API_KEY configured — needed for DeepEval judge model")
 
 
 # ===========================================================================
@@ -90,6 +112,7 @@ class TestCorrectness:
             criteria="Determine if the 'actual output' is factually correct based on the 'expected output'.",
             evaluation_params=[LLMTestCaseParams.ACTUAL_OUTPUT, LLMTestCaseParams.EXPECTED_OUTPUT],
             threshold=0.5,
+            model=_get_judge_model(),
         )
         test_case = LLMTestCase(
             input=qa["input"],
@@ -128,7 +151,7 @@ class TestHallucination:
             system="Only state facts explicitly mentioned in the provided context. Do not add any outside knowledge.",
         )
 
-        metric = HallucinationMetric(threshold=0.5)
+        metric = HallucinationMetric(threshold=0.5, model=_get_judge_model())
         test_case = LLMTestCase(
             input="Describe the Eiffel Tower based on the context.",
             actual_output=actual_output,
@@ -156,7 +179,7 @@ class TestHallucination:
             system="Only answer from the provided context. If the answer is not in the context, say 'I don't have that information in the provided context.'",
         )
 
-        metric = HallucinationMetric(threshold=0.5)
+        metric = HallucinationMetric(threshold=0.5, model=_get_judge_model())
         test_case = LLMTestCase(
             input="What is the population of Paris?",
             actual_output=actual_output,
@@ -197,7 +220,7 @@ class TestAnswerRelevancy:
 
         actual_output = _call_claude(api_client, api_config, case["input"])
 
-        metric = AnswerRelevancyMetric(threshold=0.5)
+        metric = AnswerRelevancyMetric(threshold=0.5, model=_get_judge_model())
         test_case = LLMTestCase(
             input=case["input"],
             actual_output=actual_output,
@@ -245,7 +268,7 @@ class TestFaithfulness:
             system="Only use facts from the provided context.",
         )
 
-        metric = FaithfulnessMetric(threshold=0.5)
+        metric = FaithfulnessMetric(threshold=0.5, model=_get_judge_model())
         test_case = LLMTestCase(
             input="Give a brief history of Tesla.",
             actual_output=actual_output,
